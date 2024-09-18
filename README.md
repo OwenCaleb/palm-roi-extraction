@@ -1,2 +1,2 @@
-# CROI
-## Palmprint CROI annotation
+# ROI
+## Palmprint ROI extraction
