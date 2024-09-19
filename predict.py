@@ -286,7 +286,7 @@ if __name__ == '__main__':
     ]
     for path in images_path_all:
         # best_roi_model_img_output/Tongji 成功输出路径
-        path=os.path.join(path,'session1/')
+        path=os.path.join(path,'session/')
         images_save_path = os.path.join(path_name_all, path)
         mk_file(images_save_path)
         for original_img in os.listdir(img_path+path):

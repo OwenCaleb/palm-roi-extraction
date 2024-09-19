@@ -2,43 +2,10 @@
 
 # Palm-ROI-Extraction
 
-Palm-ROI-Extraction and Description
-
-<!-- PROJECT SHIELDS -->
-
-[![Contributors][contributors-shield]][https://github.com/OwenCaleb/palm-roi-extraction.git/graphs/contributors]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][https://github.com/OwenCaleb/palm-roi-extraction.git/stargazers]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
-[![LinkedIn][linkedin-shield]][linkedin-url]
-
-<!-- PROJECT LOGO -->
+Palm-ROI-Extraction
 <br />
 
-<p align="center">
-  <a href="https://github.com/shaojintian/Best_README_template/">
-    <img src="images/logo.png" alt="Logo" width="80" height="80">
-  </a>
-
-  <h3 align="center">"完美的"README模板</h3>
-  <p align="center">
-    一个"完美的"README模板去快速开始你的项目！
-    <br />
-    <a href="https://github.com/shaojintian/Best_README_template"><strong>探索本项目的文档 »</strong></a>
-    <br />
-    <br />
-    <a href="https://github.com/shaojintian/Best_README_template">查看Demo</a>
-    ·
-    <a href="https://github.com/shaojintian/Best_README_template/issues">报告Bug</a>
-    ·
-    <a href="https://github.com/shaojintian/Best_README_template/issues">提出新特性</a>
-  </p>
-
 </p>
-
-
- 本篇README.md面向开发者
 
 ## 目录
 
@@ -57,30 +24,26 @@ Palm-ROI-Extraction and Description
 
 ### 上手指南
 
-请将所有链接中的“shaojintian/Best_README_template”改为“your_github_name/your_repository”
-
-
-
 ###### 开发前的配置要求
 
-1. xxxxx x.x.x
-2. xxxxx x.x.x
+1. 虚拟环境创建python3.8cuda12.1
+2. 其它需要的包
 
 ###### **安装步骤**
 
-1. Get a free API Key at [https://example.com](https://example.com)
-2. Clone the repo
+1. Clone the repo
 
 ```sh
-git clone https://github.com/shaojintian/Best_README_template.git
+git clone https://github.com/OwenCaleb/palm-roi-extraction
 ```
 
 ### 文件目录说明
-eg:
+
+eg:请按以下结构进行项目组织
 
 ```
 filetree 
-├── ARCHITECTURE.md
+├── README.md
 ├── LICENSE.txt
 ├── README.md
 ├── /account/
