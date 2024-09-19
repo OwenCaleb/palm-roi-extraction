@@ -282,17 +282,17 @@ if __name__ == '__main__':
     # img_path/images_path_all 构成测试集路径
     img_path = './test_data_base/'
     images_path_all = [
-        "Tongji",
-        "MPD"
+        "Tongji"
     ]
     for path in images_path_all:
         # best_roi_model_img_output/Tongji 成功输出路径
+        path=os.path.join(path,'session1/')
         images_save_path = os.path.join(path_name_all, path)
         mk_file(images_save_path)
         for original_img in os.listdir(img_path+path):
             # ./test_data_base/Tongji
             if len(original_img.split()) < 3:
-                img1 = cv2.imread(img_path + path + '/' +original_img)
+                img1 = cv2.imread(img_path + path  +original_img)
                 gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
                 img2 = np.zeros_like(img1)
                 img2[:, :, 0] = gray
@@ -315,10 +315,17 @@ if __name__ == '__main__':
 
             res = np.empty([1,7])
             for i, c in ret.items():
-                tmp_s = ret[i][ret[i][:,5]>0.3]
-                tmp_c = np.ones(len(tmp_s)) * (i+1)
-                tmp = np.c_[tmp_c,tmp_s]
-                res = np.append(res,tmp,axis=0)
+                # 提取置信度大于0.3的检测结果
+                tmp_s = ret[i][ret[i][:, 5] > 0.3]
+                if len(tmp_s) == 0:
+                    # 如果没有置信度大于0.3的结果，则提取最大置信度的结果
+                    max_conf_idx = np.argmax(ret[i][:, 5])  # 获取最大置信度的索引
+                    max_conf_detection = ret[i][max_conf_idx:max_conf_idx + 1]  # 提取最大置信度的检测结果
+                    tmp_s = max_conf_detection
+
+                tmp_c = np.ones(len(tmp_s)) * (i + 1)
+                tmp = np.c_[tmp_c, tmp_s]
+                res = np.append(res, tmp, axis=0)
             res = np.delete(res, 0, 0)
             res = res.tolist()
             # ./test_data_base/Tongji
