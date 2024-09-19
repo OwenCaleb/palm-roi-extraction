@@ -89,8 +89,19 @@ class CtdetLoss(torch.nn.Module):
         wh_weight = self.loss_weight['wh_weight']
         reg_weight = self.loss_weight['reg_weight']
         ang_weight = self.loss_weight['ang_weight']
-#        print(pred_tensor['hm'].size())
+        # 包含多个张量的字典
+        # print(pred_tensor.keys()) dict_keys(['hm', 'wh', 'ang', 'reg'])
+        # print(target_tensor.keys()) dict_keys(['input', 'hm', 'reg_mask', 'ind', 'wh', 'ang', 'reg'])
+        # print(pred_tensor['hm'].size()) torch.Size([16, 1, 128, 128])
+        # print(pred_tensor['wh'].size()) torch.Size([16, 2, 128, 128])
+        # print(pred_tensor['reg'].size()) torch.Size([16, 2, 128, 128])
+        # print(pred_tensor['ang'].size()) torch.Size([16, 1, 128, 128])
+        # print(target_tensor['ind'].size()) torch.Size([16, 128])
+        # print(target_tensor['reg_mask'].size()) torch.Size([16, 128])
+        # print(target_tensor['ang'].size()) torch.Size([16, 128, 1])
+        # print(target_tensor['wh'].size()) torch.Size([16, 128, 2])
         hm_loss, wh_loss, off_loss, ang_loss = 0, 0, 0, 0
+        # 更平滑
         pred_tensor['hm'] = _sigmoid(pred_tensor['hm'])
 #        print(target_tensor['hm'].size())
         hm_loss += self.crit(pred_tensor['hm'], target_tensor['hm'])

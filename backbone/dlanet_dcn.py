@@ -175,8 +175,10 @@ class Tree(nn.Module):
         if level_root:
             root_dim += in_channels
         if levels == 1:
+            # 16 16 512 512
             self.tree1 = block(in_channels, out_channels, stride,
                                dilation=dilation)
+            # 16 32 512 256
             self.tree2 = block(out_channels, out_channels, 1,
                                dilation=dilation)
         else:
@@ -245,7 +247,12 @@ class DLA(nn.Module):
                            level_root=True, root_residual=residual_root)
         self.level5 = Tree(levels[5], block, channels[4], channels[5], 2,
                            level_root=True, root_residual=residual_root)
-
+        # 经过5个stage后从  512 16  ->   16  512
+        '''
+        初始化方法是 He 初始化（也称为 Kaiming 初始化），它是 Xavier 初始化的一种改进，专门用于 ReLU 激活函数>
+        He 初始化通过选择合适的方差来保持前向传播中信号的稳定性，防止梯度消失或爆炸。
+        我们直接使用预训练模型。
+        '''
         # for m in self.modules():
         #     if isinstance(m, nn.Conv2d):
         #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -268,7 +275,7 @@ class DLA(nn.Module):
         layers.append(block(inplanes, planes, stride, downsample=downsample))
         for i in range(1, blocks):
             layers.append(block(inplanes, planes))
-
+        # 被封装在 modules 列表中，并最终用 nn.Sequential(*modules) 封装成一个顺序容器，返回作为一个整体的卷积层。
         return nn.Sequential(*layers)
 
     def _make_conv_level(self, inplanes, planes, convs, stride=1, dilation=1):
@@ -278,9 +285,11 @@ class DLA(nn.Module):
                 nn.Conv2d(inplanes, planes, kernel_size=3,
                           stride=stride if i == 0 else 1,
                           padding=dilation, bias=False, dilation=dilation),
+                # 批量归一化用于对卷积层的输出进行标准化，以加速训练和提高模型的稳定性。在训练过程中以BN_MOMENTUM的速率更新其运行均值和方差
                 nn.BatchNorm2d(planes, momentum=BN_MOMENTUM),
                 nn.ReLU(inplace=True)])
             inplanes = planes
+        # 被封装在 modules 列表中，并最终用 nn.Sequential(*modules) 封装成一个顺序容器，返回作为一个整体的卷积层。
         return nn.Sequential(*modules)
 
     def forward(self, x):
@@ -493,17 +502,11 @@ class Creat_DlaNet(nn.Module):
 
 def DlaNet(num_layers=34, heads = {'hm': 1, 'wh': 2, 'ang':1, 'reg': 2}, head_conv=256, plot=False):
     model = Creat_DlaNet('dla{}'.format(num_layers), heads,
-                 pretrained=True,
+                 pretrained=True,#从预训练模型加载权重，以加速训练或提高性能。
                  down_ratio=4,
                  final_kernel=1,
                  last_level=5,
                  head_conv=head_conv,
                  plot = plot)
     return model
-
-
-
-
-
-
 

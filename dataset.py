@@ -7,7 +7,7 @@ import numpy as np
 import torch.utils.data as data
 import pycocotools.coco as coco
 import re
-
+from PIL import Image
 class ctDataset(data.Dataset):
     num_classes = 1
     default_resolution = [512, 512]
@@ -29,8 +29,8 @@ class ctDataset(data.Dataset):
 
         self.max_objs = 128
         self.class_name = ['obj']
-        self._valid_ids = [1]
-        self.cat_ids = {v: i for i, v in enumerate(self._valid_ids)}
+        self._valid_ids = [1] # 只有一种检测目标：palmprint
+        self.cat_ids = {v: i for i, v in enumerate(self._valid_ids)} # 1:0
         self.voc_color = [(v // 32 * 64 + 64, (v // 8) % 4 * 64, v % 8 * 32) for v in range(1, self.num_classes + 1)]
         self._data_rng = np.random.RandomState(123)
         self._eig_val = np.array([0.2141788, 0.01817699, 0.00341571], dtype=np.float32)
@@ -66,20 +66,28 @@ class ctDataset(data.Dataset):
             dataset=dataset
         ann_ids = self.coco.getAnnIds(imgIds=[img_id])
         anns = self.coco.loadAnns(ids=ann_ids)
-        num_objs = min(len(anns), self.max_objs)
+        num_objs = min(len(anns), self.max_objs) #1
         img = cv2.imread(img_path)# 顺序 高宽通道 假设 600 * 400
+        # height, width, channels = img.shape MPD 数据集为例
+        # print(height) 4160
+        # print(width)  3120
+        # print(channels)  3
+        # image = Image.open(img_path)
+        # width, height = image.size 3120 4160
+        # print(width)
+        # print(height)
         height, width = img.shape[0], img.shape[1]
         c = np.array([img.shape[1] / 2., img.shape[0] / 2.], dtype=np.float32)  # 中心点 200 300
-
         keep_res = False  #
         if keep_res:
             # 不是32的倍数
             input_h = (height | 31) + 1
             input_w = (width | 31) + 1
-            # 图像实际放大了？ width 416 618
+            # size 416 618
             s = np.array([input_w, input_h], dtype=np.float32)
+            print(s.shape)
         else:
-            # 取最大的，实际也放大
+            # 取最大的
             s = max(img.shape[0], img.shape[1]) * 1.0
             input_h, input_w = 512, 512
 
@@ -97,16 +105,17 @@ class ctDataset(data.Dataset):
         output_w = input_w // down_ratio
         num_classes = self.num_classes
         trans_output = get_affine_transform(c, s, 0, [output_w, output_h])
-        # heatmap
+        # heatmap 1 128 128 h w
         hm = np.zeros((num_classes, output_h, output_w), dtype=np.float32)
-        # where
+        # where  128 2
         wh = np.zeros((self.max_objs, 2), dtype=np.float32)
+        # 128 1
         ang = np.zeros((self.max_objs, 1), dtype=np.float32)
-        # 用于存储回归值（目标位置的偏移量）
+        # 用于存储回归值（目标位置的偏移量） 128 2
         reg = np.zeros((self.max_objs, 2), dtype=np.float32)
-        # 用于存储目标中心的索引
+        # 用于存储目标中心的索引 128
         ind = np.zeros((self.max_objs), dtype=np.int64)
-        # 用于指示哪些目标有回归值
+        # 用于指示哪些目标有回归值 128
         reg_mask = np.zeros((self.max_objs), dtype=np.uint8)
         draw_gaussian = draw_umich_gaussian
         for k in range(num_objs):  # num_objs图中标记物数目
@@ -114,6 +123,7 @@ class ctDataset(data.Dataset):
             # 将COCO格式的bbox转换为[x1, y1, x2, y2]格式
             bbox, an = coco_box_to_bbox(ann['bbox'])
             cls_id = int(self.cat_ids[ann['category_id']])
+            # print(cls_id) 0
             bbox[:2] = affine_transform(bbox[:2], trans_output)  # 将box坐标转换到 128*128内的坐标
             bbox[2:] = affine_transform(bbox[2:], trans_output)
             bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, output_w - 1)
@@ -123,11 +133,10 @@ class ctDataset(data.Dataset):
             if h > 0 and w > 0:
                 radius = gaussian_radius((math.ceil(h), math.ceil(w)))
                 radius = max(0, int(radius))
-
-                # 计算目标中心点坐标
+                # 计算目标中心点坐标 在这里精度也产生了损失，因此要offeset回归
                 ct = np.array([(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
-                ct_int = ct.astype(np.int32)
-                # 在heatmap上绘制高斯分布
+                ct_int = ct.astype(np.int32) #[width/2,height/2]
+                # 在heatmap上绘制高斯分布 hm[0](h,w) c r
                 draw_gaussian(hm[cls_id], ct_int, radius)
                 # 记录目标的宽、高
                 wh[k] = 1. * w, 1. * h
@@ -139,10 +148,9 @@ class ctDataset(data.Dataset):
                 reg[k] = ct - ct_int
                 # 更新reg_mask以指示目标的存在
                 reg_mask[k] = 1
-
-        # 框没旋转，图像没旋转.....单纯回归ang
+        # 到此为止，包装完成。后面就是让神经网络训练出这几个参数，接近GroundTruth
         ret = {'input': inp, 'hm': hm, 'reg_mask': reg_mask, 'ind': ind, 'wh': wh, 'ang': ang}
-        reg_offset_flag = True  #
+        reg_offset_flag = True  # 是否添加 'reg' 键
         if reg_offset_flag:
             ret.update({'reg': reg})
         return ret

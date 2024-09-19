@@ -286,7 +286,7 @@ if __name__ == '__main__':
     ]
     for path in images_path_all:
         # best_roi_model_img_output/Tongji 成功输出路径
-        path=os.path.join(path,'session/')
+        path=os.path.join(path,'session1/')
         images_save_path = os.path.join(path_name_all, path)
         mk_file(images_save_path)
         for original_img in os.listdir(img_path+path):
@@ -316,12 +316,12 @@ if __name__ == '__main__':
             res = np.empty([1,7])
             for i, c in ret.items():
                 # 提取置信度大于0.3的检测结果
-                tmp_s = ret[i][ret[i][:, 5] > 0.3]
-                if len(tmp_s) == 0:
-                    # 如果没有置信度大于0.3的结果，则提取最大置信度的结果
-                    max_conf_idx = np.argmax(ret[i][:, 5])  # 获取最大置信度的索引
-                    max_conf_detection = ret[i][max_conf_idx:max_conf_idx + 1]  # 提取最大置信度的检测结果
-                    tmp_s = max_conf_detection
+                tmp_s = ret[i][ret[i][:, 5] > 0.2]
+                # if len(tmp_s) == 0:
+                #     # 如果没有置信度大于0.3的结果，则提取最大置信度的结果
+                #     max_conf_idx = np.argmax(ret[i][:, 5])  # 获取最大置信度的索引
+                #     max_conf_detection = ret[i][max_conf_idx:max_conf_idx + 1]  # 提取最大置信度的检测结果
+                #     tmp_s = max_conf_detection
 
                 tmp_c = np.ones(len(tmp_s)) * (i + 1)
                 tmp = np.c_[tmp_c, tmp_s]
