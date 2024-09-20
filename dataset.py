@@ -149,6 +149,7 @@ class ctDataset(data.Dataset):
                 # 更新reg_mask以指示目标的存在
                 reg_mask[k] = 1
         # 到此为止，包装完成。后面就是让神经网络训练出这几个参数，接近GroundTruth
+        # inp RGB 512  hm 1 128 128
         ret = {'input': inp, 'hm': hm, 'reg_mask': reg_mask, 'ind': ind, 'wh': wh, 'ang': ang}
         reg_offset_flag = True  # 是否添加 'reg' 键
         if reg_offset_flag:

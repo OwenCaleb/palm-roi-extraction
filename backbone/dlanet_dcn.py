@@ -295,9 +295,25 @@ class DLA(nn.Module):
     def forward(self, x):
         y = []
         x = self.base_layer(x)
+        '''
+        getattr 是 Python 内置的函数，允许动态获取对象的属性。
+        'level{}'.format(i) 会生成像 'level0'、'level1' 这样的层级名称，
+        getattr(self, 'level0')(x) 等价于调用 self.level0(x)
+        '''
         for i in range(6):
             x = getattr(self, 'level{}'.format(i))(x)
             y.append(x)
+        '''
+        torch.Size([4, 16, 512, 512])
+        torch.Size([4, 32, 256, 256])
+        torch.Size([4, 64, 128, 128])
+        torch.Size([4, 128, 64, 64])
+        torch.Size([4, 256, 32, 32])
+        torch.Size([4, 512, 16, 16])
+        '''
+        # for i, layer in enumerate(y):
+        #     print(i)
+        #     print(layer.shape)
         return y
 
     def load_pretrained_model(self, data='imagenet', name='dla34', hash='ba72cf86'):
@@ -320,6 +336,7 @@ def dla34(pretrained=True, **kwargs):  # DLA-34
                 [16, 32, 64, 128, 256, 512],
                 block=BasicBlock, **kwargs)
     if pretrained:
+        # 学到了基本的特征，比如边缘、纹理、形状等，在迁移学习的任务中可以作为网络的初始权重，从而加快训练速度，或者提高模型的泛化能力。
         model.load_pretrained_model(data='imagenet', name='dla34', hash='ba72cf86')
     return model
 
@@ -331,14 +348,14 @@ class Identity(nn.Module):
     def forward(self, x):
         return x
 
-
+# 初始化卷积层的偏置（bias）为零。
 def fill_fc_weights(layers):
     for m in layers.modules():
         if isinstance(m, nn.Conv2d):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-
+# 初始化上采样（通常是转置卷积或上卷积）层的权重 类似于高斯的权重分布
 def fill_up_weights(up):
     w = up.weight.data
     f = math.ceil(w.size(2) / 2)
@@ -367,16 +384,23 @@ class DeformConv(nn.Module):
 
 
 class IDAUp(nn.Module):
-
+    '''
+    ida_0(256,[256,512],[1,2])
+    ida_1(128,[128,256,256],[1,2,2])
+    ida_2(64,[64,128,128,128],[1,2,2,2])
+    另外，又创建了一个 64 [64,128,256] [1,2,4]
+    '''
     def __init__(self, o, channels, up_f):
         super(IDAUp, self).__init__()
         for i in range(1, len(channels)):
-            c = channels[i]
-            f = int(up_f[i])  
-            proj = DeformConv(c, o)
-            node = DeformConv(o, o)
-     
-            up = nn.ConvTranspose2d(o, o, f * 2, stride=f, 
+            c = channels[i] #512  /  256  256/.../ 128 256
+            f = int(up_f[i])  #2   / 2  2 /.../ 2 4
+            proj = DeformConv(c, o) # 512->256  /  256->128 256->128/.../128->64 256->64
+            node = DeformConv(o, o) # 256->256  /  128->128 128->128/.../64->64 64->64
+            # print( f * 2) #4
+            # print( f) #2
+            # 16->32变大一倍 /32->64 变大一倍 32->64 变大一倍
+            up = nn.ConvTranspose2d(o, o, f * 2, stride=f,
                                     padding=f // 2, output_padding=0,
                                     groups=o, bias=False)
             fill_up_weights(up)
@@ -387,8 +411,17 @@ class IDAUp(nn.Module):
                  
         
     def forward(self, layers, startp, endp):
-        for i in range(startp + 1, endp):
-            upsample = getattr(self, 'up_' + str(i - startp))
+        #  # ida_0(layers, 4, 6) ida_1(layers, 3, 6) ida_2(layers, 2, 6)
+        '''
+        单独创建的IDAUP 是 out0 out1 out2 out3
+            0torch.Size([4, 64, 128, 128])
+            1torch.Size([4, 128, 64, 64])
+            2torch.Size([4, 256, 32, 32])
+            startp=0
+            endp=3
+        '''
+        for i in range(startp + 1, endp): #5 /4 5/.../1 2
+            upsample = getattr(self, 'up_' + str(i - startp)) #1 /1  2
             project = getattr(self, 'proj_' + str(i - startp))
             layers[i] = upsample(project(layers[i]))
             node = getattr(self, 'node_' + str(i - startp))
@@ -397,6 +430,7 @@ class IDAUp(nn.Module):
 
 
 class DLAUp(nn.Module):
+    # 2  /  64 128 256 512 / 1 2 4 8
     def __init__(self, startp, channels, scales, in_channels=None):
         super(DLAUp, self).__init__()
         self.startp = startp
@@ -405,19 +439,41 @@ class DLAUp(nn.Module):
         self.channels = channels
         channels = list(channels)
         scales = np.array(scales, dtype=int)
-        for i in range(len(channels) - 1):
-            j = -i - 2
+        '''
+        ida_0(256,[256,512],[1,2])
+        ida_1(128,[128,256,256],[1,2,2])
+        ida_2(64,[64,128,128,128],[1,2,2,2])
+        '''
+        for i in range(len(channels) - 1):# 0  1  2
+            j = -i - 2 # -2   -3   -4
             setattr(self, 'ida_{}'.format(i),
                     IDAUp(channels[j], in_channels[j:],
                           scales[j:] // scales[j]))
+            # print(channels[j])
+            # print( in_channels[j:])
+            # print(scales[j:] // scales[j])
             scales[j + 1:] = scales[j]
             in_channels[j + 1:] = [channels[j] for _ in channels[j + 1:]]
 
     def forward(self, layers):
-        out = [layers[-1]] # start with 32
-        for i in range(len(layers) - self.startp - 1):
-            ida = getattr(self, 'ida_{}'.format(i))
-            ida(layers, len(layers) -i - 2, len(layers))
+        # torch.Size([4, 16, 512, 512])
+        # torch.Size([4, 32, 256, 256])
+        # torch.Size([4, 64, 128, 128])
+        # torch.Size([4, 128, 64, 64])
+        # torch.Size([4, 256, 32, 32])
+        # torch.Size([4, 16, 512, 512])
+        # for layer in layers:
+        #     print(layer.shape)
+        out = [layers[-1]]
+        for i in range(len(layers) - self.startp - 1):# 0 1 2
+            # print(i)
+            ida = getattr(self, 'ida_{}'.format(i)) #ida_0 ida_1 ida_2
+            '''
+            ida_0(256,[256,512],[1,2])
+            ida_1(128,[128,256,256],[1,2,2])
+            ida_2(64,[64,128,128,128],[1,2,2,2])
+            '''
+            ida(layers, len(layers) -i - 2, len(layers)) # ida_0(layers, 4, 6) ida_1(layers, 3, 6) ida_2(layers, 2, 6)
             out.insert(0, layers[-1])
         return out
 
@@ -438,26 +494,30 @@ class Creat_DlaNet(nn.Module):
                  last_level, head_conv, out_channel=0):
         self.plot = plot
         super(Creat_DlaNet, self).__init__()
-        
+        # print(down_ratio) #4
         self.first_level = int(np.log2(down_ratio))
-        self.last_level = last_level
+        self.last_level = last_level #5
         
-        # globals()[base_name](pretrained=pretrained) 意思是在全局寻找一个叫 base_name 的函数或者类，
+        # globals()[base_name](pretrained=pretrained) 意思是在全局寻找一个叫 dla34 的函数或者类，
         # 他的参数 pretrained 为 true
         self.base = globals()[base_name](pretrained=pretrained)
-        channels = self.base.channels
+        channels = self.base.channels #[16, 32, 64, 128, 256, 512]
+        # print(self.first_level) #2 从第index=2,也就是第三阶段，也就是128 64开始上采样
         scales = [2 ** i for i in range(len(channels[self.first_level:]))]
+        # print(scales) #[1, 2, 4, 8]
         self.dla_up = DLAUp(self.first_level, channels[self.first_level:], scales)
 
         if out_channel == 0:
-            out_channel = channels[self.first_level]
+            out_channel = channels[self.first_level] #64
 
         self.ida_up = IDAUp(out_channel, channels[self.first_level:self.last_level], 
                             [2 ** i for i in range(self.last_level - self.first_level)])
         
         self.heads = heads
+        # heads = {'hm': 1, 'wh': 2, 'ang':1, 'reg': 2}
         for head in self.heads:
             classes = self.heads[head]
+            # head_conv=256
             if head_conv > 0:
               fc = nn.Sequential(
                   nn.Conv2d(channels[self.first_level], head_conv,
@@ -478,19 +538,37 @@ class Creat_DlaNet(nn.Module):
                 fc.bias.data.fill_(-2.19)
               else:
                 fill_fc_weights(fc)
+            '''
+            这行代码将构建好的卷积层 fc 动态地赋值给对象的 head 属性。
+            例如，self.hm = fc，self.wh = fc，以便模型可以通过 self.hm、self.wh 等来直接访问对应的任务头。
+            '''
             self.__setattr__(head, fc)
 
     def forward(self, x):
         x = self.base(x)
         x = self.dla_up(x)
-
+        # for i ,item in enumerate(x):
+        #     print(str(i)+str(item.shape))
+        '''
+            0torch.Size([4, 64, 128, 128])
+            1torch.Size([4, 128, 64, 64])
+            2torch.Size([4, 256, 32, 32])
+            3torch.Size([4, 512, 16, 16])
+        '''
         y = []
-        for i in range(self.last_level - self.first_level):
+        for i in range(self.last_level - self.first_level): #0 1 2
             y.append(x[i].clone())
         self.ida_up(y, 0, len(y))
-
+        '''
+            0torch.Size([4, 64, 128, 128])
+            1torch.Size([4, 64, 128, 128])
+            2torch.Size([4, 64, 128, 128])
+        '''
+        # for i ,item in enumerate(y):
+        #     print(str(i)+str(item.shape))
         z = {}
         res = [] # 为了画图
+        # torch.Size([4, 1, 128, 128]) 'hm': 1, 'wh': 2, 'ang':1, 'reg': 2
         for head in self.heads:
             z[head] = self.__getattr__(head)(y[-1])
             res.append(self.__getattr__(head)(y[-1])) #为了画图，不画图就返回ret
@@ -501,12 +579,13 @@ class Creat_DlaNet(nn.Module):
 
 
 def DlaNet(num_layers=34, heads = {'hm': 1, 'wh': 2, 'ang':1, 'reg': 2}, head_conv=256, plot=False):
+    # 指定网络的多个输出头（heads）以及每个输出头的通道数。
     model = Creat_DlaNet('dla{}'.format(num_layers), heads,
                  pretrained=True,#从预训练模型加载权重，以加速训练或提高性能。
                  down_ratio=4,
                  final_kernel=1,
                  last_level=5,
-                 head_conv=head_conv,
+                 head_conv=head_conv,#指定每个输出头前的卷积层通道数
                  plot = plot)
     return model
 

@@ -9,14 +9,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 def _neg_loss(pred, gt):
+
+  # 用于目标检测中训练网络，以处理不平衡的正负样本问题。
   ''' Modified focal loss. Exactly the same as CornerNet.
       Runs faster and costs a little bit more memory
     Arguments:
       pred (batch x c x h x w)
-      gt_regr (batch x c x h x w)
+      gt_regr (batch x c x h x w)  ground truth
   '''
-  pos_inds = gt.eq(1).float()  
-  neg_inds = gt.lt(1).float()
+  pos_inds = gt.eq(1).float()  # 正样本掩码：gt中等于1的位置
+  neg_inds = gt.lt(1).float()  # 负样本掩码：gt中小于1的位置
   neg_weights = torch.pow(1 - gt, 4)
   loss = 0
   pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds
@@ -42,9 +44,24 @@ class FocalLoss(nn.Module):
 
 
 def _gather_feat(feat, ind, mask=None):
+    #angle为例
     dim  = feat.size(2)
+    # print(ind.shape) #torch.Size([16, 128])  1000000000000000...0
     ind  = ind.unsqueeze(2).expand(ind.size(0), ind.size(1), dim)
-    feat = feat.gather(1, ind)
+    # print(ind.shape) #torch.Size([16, 128, 1])
+    # print(feat.shape)#torch.Size([16, 16384, 1])
+    # print(ind)
+    '''
+     [[7883],
+     [   0],
+     [   0],
+     ...,
+     [   0],
+     [   0],
+     [   0]],
+    '''
+    feat = feat.gather(1, ind)#沿着第一维取出ind位置的元素#torch.Size([16, 16384, 1])
+    # print(feat.shape) # 16, 128 ,1
     if mask is not None:
         mask = mask.unsqueeze(2).expand_as(feat)
         feat = feat[mask]
@@ -52,9 +69,9 @@ def _gather_feat(feat, ind, mask=None):
     return feat
 
 def _transpose_and_gather_feat(feat, ind):
-    feat = feat.permute(0, 2, 3, 1).contiguous()
-    feat = feat.view(feat.size(0), -1, feat.size(3))
-    feat = _gather_feat(feat, ind)
+    feat = feat.permute(0, 2, 3, 1).contiguous() #torch.Size([16, 128,128,1])
+    feat = feat.view(feat.size(0), -1, feat.size(3)) #batchsize width*height channels
+    feat = _gather_feat(feat, ind)#提取对应index的特征值
     return feat
 
 class RegL1Loss(nn.Module):
@@ -62,8 +79,10 @@ class RegL1Loss(nn.Module):
     super(RegL1Loss, self).__init__()
   
   def forward(self, pred, mask, ind, target):
-    pred = _transpose_and_gather_feat(pred, ind)  
-    mask = mask.unsqueeze(2).expand_as(pred).float() 
+    pred = _transpose_and_gather_feat(pred, ind)  #(batch_size, num_indices, channels) num_indices 0-width*height-1的索引
+    mask = mask.unsqueeze(2).expand_as(pred).float()
+    # print(mask.shape) torch.Size([16, 128, 1])
+    # print(pred.shape) torch.Size([16, 128, 1])
     loss = F.smooth_l1_loss(pred * mask, target * mask, reduction='sum')
     loss = loss / (mask.sum() + 1e-4) # 每个目标的平均损失
     return loss
@@ -84,7 +103,8 @@ class CtdetLoss(torch.nn.Module):
         self.crit_wh = RegL1Loss()
         self.loss_weight = loss_weight
         
-    def forward(self, pred_tensor, target_tensor): 
+    def forward(self, pred_tensor, target_tensor):
+        # torch.Size([4, 1, 128, 128]) 'hm': 1, 'wh': 2, 'ang':1, 'reg': 2
         hm_weight = self.loss_weight['hm_weight']
         wh_weight = self.loss_weight['wh_weight']
         reg_weight = self.loss_weight['reg_weight']
@@ -109,9 +129,9 @@ class CtdetLoss(torch.nn.Module):
             pred_tensor['ang'] = _relu(pred_tensor['ang'])
             ang_loss += self.crit_wh(pred_tensor['ang'], target_tensor['reg_mask'],target_tensor['ind'], target_tensor['ang'])  
         if wh_weight > 0:
-            wh_loss += self.crit_wh(pred_tensor['wh'], target_tensor['reg_mask'],target_tensor['ind'], target_tensor['wh']) 
+            wh_loss += self.crit_wh(pred_tensor['wh'], target_tensor['reg_mask'],target_tensor['ind'], target_tensor['wh'])
         if reg_weight > 0:
-            off_loss += self.crit_reg(pred_tensor['reg'], target_tensor['reg_mask'],target_tensor['ind'], target_tensor['reg']) 
+            off_loss += self.crit_reg(pred_tensor['reg'], target_tensor['reg_mask'],target_tensor['ind'], target_tensor['reg'])
         return hm_weight * hm_loss + wh_weight * wh_loss + reg_weight * off_loss + ang_weight * ang_loss
 
 

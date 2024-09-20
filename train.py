@@ -59,7 +59,7 @@ def check_cuda_memory(device_id=0, threshold=5000):
         print("Detection stopped by user.")
 
 def run():
-    check_cuda_memory(device_id=0, threshold=3000)
+    check_cuda_memory(device_id=0, threshold=5000)
     loss_weight = {'hm_weight': 1, 'wh_weight': 0.1, 'ang_weight': 1, 'reg_weight': 0.5}
     device = torch.device("cuda")
     gpus = [0, 1, 2,3]
