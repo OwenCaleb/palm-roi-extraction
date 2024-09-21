@@ -572,6 +572,9 @@ class Creat_DlaNet(nn.Module):
         for head in self.heads:
             z[head] = self.__getattr__(head)(y[-1])
             res.append(self.__getattr__(head)(y[-1])) #为了画图，不画图就返回ret
+        # print(len(res)) #4
+        # print(res[2].shape) #torch.Size([2, 1, 128, 128])
+        # print(res[2])
         return res if self.plot else z
         
         

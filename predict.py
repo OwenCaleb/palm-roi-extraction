@@ -17,6 +17,78 @@ def mk_file(file_path: str):
     if os.path.exists(file_path):
         return
     os.makedirs(file_path)
+
+
+def draw_bbox(res, image, filename, filepath2):
+    # 读取图像
+    if not res:
+        print("cropping and saving fail!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!: " + filename.split('.')[0] + '.png')
+        image.save(os.path.join(path_name_all + '/fail_images', filename.split('.')[0] + '.png'))
+        return
+
+    for class_name, lx, ly, rx, ry, ang, prob in res:
+        result = [int((rx + lx) / 2), int((ry + ly) / 2), int(rx - lx), int(ry - ly), ang]
+        result = np.array(result)
+        x = int(result[0])  # 中心
+        y = int(result[1])
+        height = int(result[2])
+        width = int(result[3])
+        angle = result[4]
+
+        # 指定新的尺寸
+        lenge = max(image.width, image.height)
+        new_width = lenge * 3
+        new_height = lenge * 3
+
+        # 计算左上角的坐标，以在新尺寸内居中显示图像
+        left = (new_width - image.width) // 2
+        top = (new_height - image.height) // 2
+
+        # 创建新的画布，填充为黑色
+        padded_image = Image.new('L', (new_width, new_height), color='black')
+        image = image.convert('L')
+        # 将原始图像粘贴到新的画布中
+        padded_image.paste(image, (left, top))
+
+        # 计算旋转框的四个角点坐标
+        center_x = left + x
+        center_y = top + y
+
+        # 计算旋转框的四个顶点坐标
+        top_left = (center_x - width / 2, center_y - height / 2)
+        top_right = (center_x + width / 2, center_y - height / 2)
+        bottom_left = (center_x - width / 2, center_y + height / 2)
+        bottom_right = (center_x + width / 2, center_y + height / 2)
+
+        # 得到新的旋转框的四个顶点坐标
+        new_rect_points = [top_left, top_right, bottom_right, bottom_left]
+
+        # 旋转角度转换为弧度
+        angle_rad = math.radians(-angle)
+
+        # 计算旋转后的顶点坐标
+        rotated_rect_points = []
+        for point in new_rect_points:
+            rotated_x = center_x + (point[0] - center_x) * math.cos(angle_rad) - (point[1] - center_y) * math.sin(
+                angle_rad)
+            rotated_y = center_y + (point[0] - center_x) * math.sin(angle_rad) + (point[1] - center_y) * math.cos(
+                angle_rad)
+            rotated_rect_points.append((rotated_x, rotated_y))
+
+        # 得到新的旋转框的坐标范围
+        min_x = min(point[0] for point in rotated_rect_points)
+        max_x = max(point[0] for point in rotated_rect_points)
+        min_y = min(point[1] for point in rotated_rect_points)
+        max_y = max(point[1] for point in rotated_rect_points)
+
+        # 裁剪旋转后的图像
+        cropped_image = padded_image.crop((min_x, min_y, max_x, max_y))
+
+        # 保存结果
+        images_save_path = os.path.join(path_name_all, filepath2)
+        cropped_image.save(os.path.join(images_save_path, filename.split('.')[0] + '.png'))
+        print("cropping and saving successfully: " + filename.split('.')[0] + '.png')
+        break
 def draw(res,image,filename,filepath2):
     # 读取图像
     if not res:
@@ -25,7 +97,7 @@ def draw(res,image,filename,filepath2):
     for class_name,lx,ly,rx,ry,ang, prob in res:
         result = [int((rx+lx)/2),int((ry+ly)/2),int(rx-lx),int(ry-ly),ang]
         result=np.array(result)
-        x=int(result[0])
+        x=int(result[0])#中心
         y=int(result[1])
         height=int(result[2])
         width=int(result[3])
@@ -273,11 +345,11 @@ if __name__ == '__main__':
     # img_path/images_path_all 构成测试集路径
     img_path = './test_data_base/'
     images_path_all = [
-        "MPD"
+        "Tongji"
     ]
     for path in images_path_all:
         # best_roi_model_img_output/Tongji 成功输出路径
-        path=os.path.join(path,'')
+        path=os.path.join(path,'session1')
         images_save_path = os.path.join(path_name_all, path)
         mk_file(images_save_path)
         for original_img in os.listdir(img_path+path):
@@ -297,7 +369,7 @@ if __name__ == '__main__':
             #     print(str(i)+' '+str(c.shape))
 
             for i, c in ret.items():
-                # 提取了类别 i 中所有检测框的置信度 也就是heatmap的值
+                # 提取了类别 i 中所有检测框的置信度 当前中心点存在物体的概率值，代码中设置的阈值为0.3
                 tmp_s = ret[i][ret[i][:, 5] > 0.3]
                 if len(tmp_s) == 0:
                     # 如果没有置信度大于0.3的结果，则提取最大置信度的结果
@@ -323,4 +395,4 @@ if __name__ == '__main__':
             # numpy() 方法将 Tensor 转换为 NumPy 数组，但在此之前需要确保 Tensor 在 CPU 上
             images = Image.fromarray(img)
             # ./test_data_base/Tongji
-            draw(res,images,original_img,path)
+            draw_bbox(res,images,original_img,path)
